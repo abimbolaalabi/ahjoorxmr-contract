@@ -321,3 +321,42 @@ fn test_get_reward_dist_params_default_and_set() {
         (DistributionType::Weighted, Some(weights))
     );
 }
+
+#[test]
+fn test_get_approved_tokens_paginates() {
+    let (env, client, admin, base_token, _members) = setup_with_members(2, false, 0);
+
+    let t1 = env
+        .register_stellar_asset_contract_v2(admin.clone())
+        .address();
+    let t2 = env
+        .register_stellar_asset_contract_v2(admin.clone())
+        .address();
+    client.add_approved_token(&t1);
+    client.add_approved_token(&t2);
+
+    // Base token is auto-approved at init, so the full list is [base, t1, t2].
+    let all = client.get_approved_tokens(&0, &10);
+    assert_eq!(all.len(), 3);
+    assert_eq!(all.get(0).unwrap(), base_token);
+    assert_eq!(all.get(1).unwrap(), t1);
+    assert_eq!(all.get(2).unwrap(), t2);
+
+    let first = client.get_approved_tokens(&0, &2);
+    assert_eq!(first.len(), 2);
+    assert_eq!(first.get(0).unwrap(), base_token);
+    assert_eq!(first.get(1).unwrap(), t1);
+
+    let second = client.get_approved_tokens(&2, &2);
+    assert_eq!(second.len(), 1);
+    assert_eq!(second.get(0).unwrap(), t2);
+}
+
+#[test]
+fn test_get_approved_tokens_out_of_range_and_zero_limit() {
+    let (_env, client, _admin, _base_token, _members) = setup_with_members(2, false, 0);
+
+    assert_eq!(client.get_approved_tokens(&5, &10).len(), 0);
+    assert_eq!(client.get_approved_tokens(&0, &0).len(), 0);
+    assert_eq!(client.get_approved_tokens(&0, &u32::MAX).len(), 1);
+}

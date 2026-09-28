@@ -6524,11 +6524,24 @@ impl AhjoorContract {
             .unwrap_or(Map::new(&env))
     }
 
-    pub fn get_approved_tokens(env: Env) -> Vec<Address> {
-        env.storage()
+    /// Returns the slice `[offset, offset + limit)` of approved tokens. An
+    /// out-of-range `offset` returns an empty vec rather than panicking.
+    pub fn get_approved_tokens(env: Env, offset: u32, limit: u32) -> Vec<Address> {
+        let tokens: Vec<Address> = env
+            .storage()
             .instance()
             .get(&DataKey::ApprovedTokens)
-            .unwrap_or(Vec::new(&env))
+            .unwrap_or(Vec::new(&env));
+
+        let total = tokens.len();
+        let start = offset.min(total);
+        let end = start.saturating_add(limit).min(total);
+
+        let mut page = Vec::new(&env);
+        for i in start..end {
+            page.push_back(tokens.get(i).unwrap());
+        }
+        page
     }
 
     pub fn get_proposal(env: Env, proposal_id: u32) -> Option<Proposal> {
