@@ -127,12 +127,51 @@ fn test_add_and_remove_origin_contract() {
     let origin = Address::generate(&env);
     refund_client.add_refund_origin_contract(&admin, &origin);
 
-    let whitelist = refund_client.get_cross_contract_whitelist();
+    let whitelist = refund_client.get_cross_contract_whitelist(&0u32, &10u32);
     assert_eq!(whitelist.len(), 1);
 
     refund_client.remove_refund_origin_contract(&admin, &origin);
-    let whitelist = refund_client.get_cross_contract_whitelist();
+    let whitelist = refund_client.get_cross_contract_whitelist(&0u32, &10u32);
     assert_eq!(whitelist.len(), 0);
+}
+
+#[test]
+fn test_cross_contract_whitelist_pagination_middle_page() {
+    let (env, refund_client, _payment_client, admin, _token_addr, _token_admin) = setup_cc();
+
+    let mut origin0 = Address::generate(&env);
+    for _ in 0..7 {
+        refund_client.add_refund_origin_contract(&admin, &origin0);
+        origin0 = Address::generate(&env);
+    }
+
+    let page = refund_client.get_cross_contract_whitelist(&2u32, &3u32);
+    assert_eq!(page.len(), 3);
+
+    let first_page = refund_client.get_cross_contract_whitelist(&0u32, &7u32);
+    assert_eq!(page.get(0).unwrap(), first_page.get(2).unwrap());
+    assert_eq!(page.get(1).unwrap(), first_page.get(3).unwrap());
+    assert_eq!(page.get(2).unwrap(), first_page.get(4).unwrap());
+}
+
+#[test]
+fn test_cross_contract_whitelist_pagination_runs_past_end() {
+    let (env, refund_client, _payment_client, admin, _token_addr, _token_admin) = setup_cc();
+
+    let mut origin0 = Address::generate(&env);
+    for _ in 0..7 {
+        refund_client.add_refund_origin_contract(&admin, &origin0);
+        origin0 = Address::generate(&env);
+    }
+
+    let partial = refund_client.get_cross_contract_whitelist(&5u32, &4u32);
+    assert_eq!(partial.len(), 2);
+
+    let empty = refund_client.get_cross_contract_whitelist(&7u32, &4u32);
+    assert_eq!(empty.len(), 0);
+
+    let zero_limit = refund_client.get_cross_contract_whitelist(&0u32, &0u32);
+    assert_eq!(zero_limit.len(), 0);
 }
 
 #[test]
@@ -144,49 +183,3 @@ fn test_cannot_whitelist_same_contract_twice() {
     refund_client.add_refund_origin_contract(&admin, &origin);
     refund_client.add_refund_origin_contract(&admin, &origin);
 }
-//! Boundary-ledger tests for #553: permissionless-after-timeout functions must
-//! treat the exact-boundary ledger (now == deadline) consistently. This
-//! contract's convention (matching escrow's auto_release_expired /
-//! expire_cancellation / expire_seller_transfer_veto and rosca's
-//! close_round / finalize_round) is an *exclusive* boundary: the window has
-//! elapsed only once `now` is strictly greater than the deadline.
-//!
-//! ## #553 audit table
-//!
-//! Every permissionless-after-timeout deadline/expiry comparison named in
-//! #553, and the operator each used *before* this fix. "Elapsed at
-//! boundary?" answers: is `now == deadline` already considered
-//! expired/elapsed? All functions are now aligned on "No" (exclusive
-//! boundary — `now` must be *strictly greater than* the deadline).
-//!
-//! | Contract | Function | Field compared | Operator (before) | Elapsed at boundary? (before) | Elapsed at boundary? (after) |
-//! | -------- | -------- | --------------- | ------------------ | ------------------------------ | ------------------------------ |
-//! | escrow | `auto_release_expired` | `escrow.deadline` | `now <= deadline` blocks | No | No (unchanged) |
-//! | escrow | `expire_cancellation` | `request.expires_at` | `now <= expires_at` blocks | No | No (unchanged) |
-//! | escrow | `expire_seller_transfer_veto` | `proposal.veto_deadline` (ledger seq) | `seq <= veto_deadline` blocks | No | No (unchanged) |
-//! | rosca | `close_round` | round deadline | `now <= deadline` blocks | No | No (unchanged) |
-//! | rosca | `finalize_round` | round deadline | `now <= deadline` blocks | No | No (unchanged) |
-//! | refund | `auto_approve_refund` | `requested_at + dispute_window` | `now < threshold` blocks | **Yes** | No (fixed: now `now <= threshold` blocks) |
-//! | refund | `auto_cancel_expired_request` | `requested_at + cancel_window` | `now < threshold` blocks | **Yes** | No (fixed: now `now <= threshold` blocks) |
-//! | refund | `auto_reject_stale_refund` | `requested_at + auto_reject_window + extension` | `now < deadline` blocks | **Yes** | No (fixed: now `now <= deadline` blocks) |
-//! | refund | `settle_expired_counter_offer` | `offer.expiry` | `now <= expiry` blocks | No | No (unchanged) |
-//!
-//! Three of the four named refund functions treated the exact-boundary
-//! ledger as already elapsed (inclusive boundary), while every escrow and
-//! rosca function — and refund's own `settle_expired_counter_offer` —
-//! treated it as not yet elapsed (exclusive boundary). No code comment
-//! documented this as an intentional difference, so `auto_approve_refund`,
-//! `auto_cancel_expired_request`, and `auto_reject_stale_refund` were
-//! aligned to the exclusive-boundary convention used everywhere else.
-use super::*;
-use soroban_sdk::testutils::{Address as _, Ledger};
-use soroban_sdk::{Address, Env, String};
-use ahjoor_payments::{AhjoorPaymentsContract, AhjoorPaymentsContractClient};
-
-struct Setup<'a> {
-    env: Env,
-    refund_client: AhjoorRefundContractClient<'a>,
-    payment_client: AhjoorPaymentsContractClient<'a>,
-    customer: Address,
-    merchant: Address,
-    token_addr: Address,
