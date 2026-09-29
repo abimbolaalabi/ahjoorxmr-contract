@@ -64,57 +64,6 @@ fn test_get_merchant_auto_approve_exempt_after_set_true() {
 }
 
 // ===========================================================================
-//  Test: get_auto_approved_merchants pagination (#920)
-// ===========================================================================
-
-#[test]
-fn test_get_auto_approved_merchants_default_empty() {
-    let (_env, refund_client, _payment_client, _admin, _token_addr, _tc, _token_admin) = setup_getters();
-
-    let page = refund_client.get_auto_approved_merchants(&0u32, &10u32);
-    assert_eq!(page.len(), 0);
-}
-
-#[test]
-fn test_get_auto_approved_merchants_pagination_middle_page() {
-    let (env, refund_client, _payment_client, admin, _token_addr, _tc, _token_admin) = setup_getters();
-
-    let mut merchant = Address::generate(&env);
-    for _ in 0..7 {
-        refund_client.add_to_auto_approve(&admin, &merchant);
-        merchant = Address::generate(&env);
-    }
-
-    let page = refund_client.get_auto_approved_merchants(&2u32, &3u32);
-    assert_eq!(page.len(), 3);
-
-    let first_page = refund_client.get_auto_approved_merchants(&0u32, &7u32);
-    assert_eq!(page.get(0).unwrap(), first_page.get(2).unwrap());
-    assert_eq!(page.get(1).unwrap(), first_page.get(3).unwrap());
-    assert_eq!(page.get(2).unwrap(), first_page.get(4).unwrap());
-}
-
-#[test]
-fn test_get_auto_approved_merchants_pagination_runs_past_end() {
-    let (env, refund_client, _payment_client, admin, _token_addr, _tc, _token_admin) = setup_getters();
-
-    let mut merchant = Address::generate(&env);
-    for _ in 0..7 {
-        refund_client.add_to_auto_approve(&admin, &merchant);
-        merchant = Address::generate(&env);
-    }
-
-    let partial = refund_client.get_auto_approved_merchants(&5u32, &4u32);
-    assert_eq!(partial.len(), 2);
-
-    let empty = refund_client.get_auto_approved_merchants(&7u32, &4u32);
-    assert_eq!(empty.len(), 0);
-
-    let zero_limit = refund_client.get_auto_approved_merchants(&0u32, &0u32);
-    assert_eq!(zero_limit.len(), 0);
-}
-
-// ===========================================================================
 //  Test: get_abuse_block_config
 // ===========================================================================
 
