@@ -8180,6 +8180,14 @@ impl AhjoorContract {
             .set(&DataKey2::ReinstatementFee, &fee);
     }
 
+    /// Returns the configured reinstatement fee (0 if unset).
+    pub fn get_reinstatement_fee(env: Env) -> i128 {
+        env.storage()
+            .instance()
+            .get(&DataKey2::ReinstatementFee)
+            .unwrap_or(0)
+    }
+
     pub fn request_reinstatement(env: Env, member: Address, reason_hash: BytesN<32>) -> u32 {
         member.require_auth();
         internals::check_not_paused(&env);
@@ -10259,6 +10267,20 @@ impl AhjoorContract {
         env.storage()
             .instance()
             .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
+    }
+
+    /// Returns the credit score weights, falling back to the defaults if unset.
+    pub fn get_score_weights(env: Env) -> ScoreWeights {
+        env.storage()
+            .instance()
+            .get(&DataKey3::ScoreWeights)
+            .unwrap_or(ScoreWeights {
+                on_time_weight: 10,
+                late_weight: -2,
+                default_weight: -20,
+                exit_weight: -15,
+                completion_weight: 30,
+            })
     }
 
     /// Admin sets the minimum credit score required to join this group.
