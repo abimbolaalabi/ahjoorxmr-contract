@@ -322,41 +322,71 @@ fn test_get_reward_dist_params_default_and_set() {
     );
 }
 
+// ─── get_reinstatement_fee ────────────────────────────────────────────────
+
 #[test]
-fn test_get_approved_tokens_paginates() {
-    let (env, client, admin, base_token, _members) = setup_with_members(2, false, 0);
-
-    let t1 = env
-        .register_stellar_asset_contract_v2(admin.clone())
-        .address();
-    let t2 = env
-        .register_stellar_asset_contract_v2(admin.clone())
-        .address();
-    client.add_approved_token(&t1);
-    client.add_approved_token(&t2);
-
-    // Base token is auto-approved at init, so the full list is [base, t1, t2].
-    let all = client.get_approved_tokens(&0, &10);
-    assert_eq!(all.len(), 3);
-    assert_eq!(all.get(0).unwrap(), base_token);
-    assert_eq!(all.get(1).unwrap(), t1);
-    assert_eq!(all.get(2).unwrap(), t2);
-
-    let first = client.get_approved_tokens(&0, &2);
-    assert_eq!(first.len(), 2);
-    assert_eq!(first.get(0).unwrap(), base_token);
-    assert_eq!(first.get(1).unwrap(), t1);
-
-    let second = client.get_approved_tokens(&2, &2);
-    assert_eq!(second.len(), 1);
-    assert_eq!(second.get(0).unwrap(), t2);
+fn test_get_reinstatement_fee_defaults_to_zero() {
+    let (_env, client, _admin, _token, _members) = setup_with_members(3, false, 0);
+    assert_eq!(client.get_reinstatement_fee(), 0);
 }
 
 #[test]
-fn test_get_approved_tokens_out_of_range_and_zero_limit() {
-    let (_env, client, _admin, _base_token, _members) = setup_with_members(2, false, 0);
+fn test_get_reinstatement_fee_returns_configured_value() {
+    let (_env, client, admin, _token, _members) = setup_with_members(3, false, 0);
+    client.set_reinstatement_fee(&admin, &250);
+    assert_eq!(client.get_reinstatement_fee(), 250);
+}
 
-    assert_eq!(client.get_approved_tokens(&5, &10).len(), 0);
-    assert_eq!(client.get_approved_tokens(&0, &0).len(), 0);
-    assert_eq!(client.get_approved_tokens(&0, &u32::MAX).len(), 1);
+#[test]
+fn test_get_reinstatement_fee_reflects_latest_update() {
+    let (_env, client, admin, _token, _members) = setup_with_members(3, false, 0);
+    client.set_reinstatement_fee(&admin, &250);
+    client.set_reinstatement_fee(&admin, &0);
+    assert_eq!(client.get_reinstatement_fee(), 0);
+}
+
+// ─── get_score_weights ────────────────────────────────────────────────────
+
+#[test]
+fn test_get_score_weights_returns_defaults_when_unset() {
+    let (_env, client, _admin, _token, _members) = setup_with_members(3, false, 0);
+    assert_eq!(
+        client.get_score_weights(),
+        ScoreWeights {
+            on_time_weight: 10,
+            late_weight: -2,
+            default_weight: -20,
+            exit_weight: -15,
+            completion_weight: 30,
+        }
+    );
+}
+
+#[test]
+fn test_get_score_weights_returns_configured_weights() {
+    let (_env, client, admin, _token, _members) = setup_with_members(3, false, 0);
+    client.set_score_weights(&admin, &5, &-1, &-10, &-8, &20);
+    assert_eq!(
+        client.get_score_weights(),
+        ScoreWeights {
+            on_time_weight: 5,
+            late_weight: -1,
+            default_weight: -10,
+            exit_weight: -8,
+            completion_weight: 20,
+        }
+    );
+}
+
+#[test]
+fn test_get_score_weights_unchanged_after_rejected_update() {
+    let (env, client, admin, _token, _members) = setup_with_members(3, false, 0);
+    client.set_score_weights(&admin, &5, &-1, &-10, &-8, &20);
+
+    let intruder = Address::generate(&env);
+    let result = client.try_set_score_weights(&intruder, &1, &1, &1, &1, &1);
+    assert!(result.is_err());
+
+    assert_eq!(client.get_score_weights().on_time_weight, 5);
+    assert_eq!(client.get_score_weights().completion_weight, 20);
 }

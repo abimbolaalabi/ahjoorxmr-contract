@@ -6648,6 +6648,9 @@ mod test_restocking_fee;
 
 #[cfg(test)]
 mod test_recall;
+
+#[cfg(test)]
+mod test_auto_approve_whitelist;
 /// Event: Customer appealed a rejected refund (#159)
 #[contractevent]
 #[derive(Clone, Debug)]
